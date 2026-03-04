@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>16x16 Digits Dataset Builder</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 20px;
+      }
+      #drawCanvas {
+        border: 2px solid #333;
+        touch-action: none;
+        cursor: crosshair;
+      }
+      .controls {
+        margin: 15px 0;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 8px;
+      }
+      textarea {
+        width: 100%;
+        height: 200px;
+        font-family: monospace;
+        font-size: 10px;
+        resize: vertical;
+        border: 1px solid #ddd;
+      }
+      input[type="number"] {
+        width: 60px;
+      }
+      label {
+        font-weight: bold;
+      }
+      .stats {
+        background: #e3f2fd;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      .status {
+        color: green;
+        font-weight: bold;
+        margin-left: 10px;
+      }
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #007bff;
+        color: white;
+      }
+      button.danger {
+        background: #dc3545;
+        color: white;
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>16x16 Digits Dataset – Sammle Daten pro Label</h1>
+
+    <div class="controls">
+      <label for="digitLabel">Aktuelles Label:</label>
+      <input type="number" id="digitLabel" min="0" max="9" value="0" />
+
+      <button id="clearBtn" class="danger">Canvas leeren</button>
+      <button id="addBtn" class="primary">16x16 berechnen & merken</button>
+
+      <div style="flex: 1"></div>
+
+      <button id="copyAllBtn" class="primary">Alle kopieren (CSV)</button>
+      <button id="resetDataBtn" class="danger">Daten zurücksetzen</button>
+    </div>
+
+    <canvas id="drawCanvas" width="560" height="560"></canvas>
+
+    <div class="stats" id="stats">
+      Sammelte Zeilen: <span id="rowCount">0</span> | Aktuelles Label:
+      <span id="currentLabel">0</span>
+    </div>
+
+    <h3>Vorschau: Komplette CSV (kopiere mit "Alle kopieren")</h3>
+    <textarea
+      id="csvPreview"
+      readonly
+      placeholder="Zeichne, drücke '16x16 berechnen & merken'..."
+    ></textarea>
+
+    <div
+      style="
+        margin-top: 20px;
+        padding: 15px;
+        background: #fff3cd;
+        border-radius: 8px;
+        border-left: 4px solid #ffc107;
+      "
+    >
+      <strong>Anleitung:</strong><br />
+      1. Label eingeben (z.B. 0).<br />
+      2. 10x zeichnen → "16x16 berechnen & merken".<br />
+      3. "Alle kopieren" → Strg+V in TextEdit/Excel.<br />
+      4. Neues Label eingeben, wiederholen.<br />
+      5. Am Ende TextEdit als .csv speichern → Jupyter!
+    </div>
+
+    <script>
+      const canvas = document.getElementById("drawCanvas");
+      const ctx = canvas.getContext("2d");
+      let dataset = []; // [{values: [...], label: 0}, ...]
+
+      function fillWhite() {
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      fillWhite();
+
+      const penColor = "#000000";
+      const penWidth = 35;
+
+      let drawing = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      // Zeichnen-Funktionen (wie vorher)
+      function getPos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        let x, y;
+        if (evt.touches && evt.touches[0]) {
+          x = evt.touches[0].clientX - rect.left;
+          y = evt.touches[0].clientY - rect.top;
+        } else {
+          x = evt.clientX - rect.left;
+          y = evt.clientY - rect.top;
+        }
+        return { x, y };
+      }
+
+      function startDraw(evt) {
+        evt.preventDefault();
+        drawing = true;
+        const pos = getPos(evt);
+        lastX = pos.x;
+        lastY = pos.y;
+      }
+
+      function draw(evt) {
+        if (!drawing) return;
+        evt.preventDefault();
+        const pos = getPos(evt);
+        ctx.strokeStyle = penColor;
+        ctx.lineWidth = penWidth;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        lastX = pos.x;
+        lastY = pos.y;
+      }
+
+      function endDraw(evt) {
+        if (!drawing) return;
+        evt && evt.preventDefault();
+        drawing = false;
+      }
+
+      canvas.addEventListener("mousedown", startDraw);
+      canvas.addEventListener("mousemove", draw);
+      canvas.addEventListener("mouseup", endDraw);
+      canvas.addEventListener("mouseleave", endDraw);
+      canvas.addEventListener("touchstart", startDraw);
+      canvas.addEventListener("touchmove", draw);
+      canvas.addEventListener("touchend", endDraw);
+      canvas.addEventListener("touchcancel", endDraw);
+
+      // 16x16 Berechnung (0-16)
+      function compute16x16() {
+        const GRID_SIZE = 16;
+        const cellW = canvas.width / GRID_SIZE;
+        const cellH = canvas.height / GRID_SIZE;
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const result = [];
+
+        for (let gy = 0; gy < GRID_SIZE; gy++) {
+          for (let gx = 0; gx < GRID_SIZE; gx++) {
+            const startX = Math.floor(gx * cellW);
+            const startY = Math.floor(gy * cellH);
+            const endX = Math.floor((gx + 1) * cellW);
+            const endY = Math.floor((gy + 1) * cellH);
+            let sum = 0;
+            let count = 0;
+
+            for (let y = startY; y < endY; y++) {
+              for (let x = startX; x < endX; x++) {
+                const idx = (y * canvas.width + x) * 4;
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                const gray = (r + g + b) / 3 / 255;
+                const intensity = 1 - gray;
+                sum += intensity;
+                count++;
+              }
+            }
+            const mean = count > 0 ? sum / count : 0;
+            result.push(Math.round(mean * 16));
+          }
+        }
+        return result;
+      }
+
+      // Clipboard
+      async function copyToClipboard(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          showStatus("✅ Vollständige CSV kopiert!");
+        } catch {
+          const textarea = document.getElementById("csvPreview");
+          textarea.value = text;
+          textarea.select();
+          document.execCommand("copy");
+          showStatus("📋 Manuell kopiert (Textfeld → Strg+C)");
+        }
+      }
+
+      function showStatus(msg) {
+        const status = document.querySelector(".status");
+        if (status) status.remove();
+        const newStatus = document.createElement("span");
+        newStatus.textContent = msg;
+        newStatus.className = "status";
+        document.querySelector(".controls").appendChild(newStatus);
+        setTimeout(() => newStatus.remove(), 4000);
+      }
+
+      function updatePreview() {
+        const csvContent = dataset
+          .map((row) => row.values.join(",") + "," + row.label)
+          .join("\n");
+        document.getElementById("csvPreview").value = csvContent;
+        document.getElementById("rowCount").textContent = dataset.length;
+        document.getElementById("currentLabel").textContent =
+          document.getElementById("digitLabel").value;
+      }
+
+      // Events
+      document.getElementById("digitLabel").addEventListener("input", () => {
+        updatePreview();
+      });
+
+      document.getElementById("clearBtn").addEventListener("click", () => {
+        fillWhite();
+      });
+
+      document.getElementById("addBtn").addEventListener("click", () => {
+        const label =
+          parseInt(document.getElementById("digitLabel").value) || 0;
+        const values = compute16x16();
+        dataset.push({ values, label });
+        updatePreview();
+        showStatus(`✅ Zeile ${dataset.length} für Label ${label} hinzugefügt`);
+        fillWhite(); // Canvas für nächste Zeichnung leeren
+      });
+
+      document
+        .getElementById("copyAllBtn")
+        .addEventListener("click", async () => {
+          if (dataset.length === 0) {
+            alert("Zuerst Daten sammeln!");
+            return;
+          }
+          const csvContent = dataset
+            .map((row) => row.values.join(",") + "," + row.label)
+            .join("\n");
+          await copyToClipboard(csvContent);
+        });
+
+      document.getElementById("resetDataBtn").addEventListener("click", () => {
+        if (confirm("Alle gesammelten Daten löschen?")) {
+          dataset = [];
+          updatePreview();
+          showStatus("🗑️ Daten zurückgesetzt");
+        }
+      });
+
+      // Initial
+      updatePreview();
+    </script>
+  </body>
+</html>
